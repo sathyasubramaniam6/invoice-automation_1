@@ -13,46 +13,48 @@ st.title("📄 Sathya Invoice Automation Tool")
 
 uploaded_files = st.file_uploader(
     "Upload Invoice Images",
-    type=["png", "jpg", "jpeg"],
+    type=["png", "jpg", "jpeg","pdf"],
     accept_multiple_files=True
 )
 
-if uploaded_files:
-    all_data = []
+for uploaded_file in uploaded_files:
+    images = []
 
-    if st.button("Extract Data from All Invoices"):
-        for uploaded_file in uploaded_files:
-            image = Image.open(uploaded_file)
-            st.image(image, caption=uploaded_file.name, width=300)
+    # Check if PDF
+    if uploaded_file.type == "application/pdf":
+        pdf_bytes = uploaded_file.read()
+        images = convert_from_bytes(pdf_bytes)
+    else:
+        images = [Image.open(uploaded_file)]
 
-            # Preprocessing
-            img = np.array(image)
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+    for i, image in enumerate(images):
+        st.image(image, caption=f"{uploaded_file.name} - Page {i+1}", width=300)
 
-            # OCR
-            results = reader.readtext(thresh, detail=0)
-            text = " ".join(results)
+        img = np.array(image)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
 
-            st.subheader(f"Extracted Text - {uploaded_file.name}")
-            st.text(text)
+        results = reader.readtext(thresh, detail=0)
+        text = " ".join(results)
 
-            # Field extraction
-            invoice_no = re.search(r"(Invoice\s*No[:\-]?\s*)(\w+)", text, re.IGNORECASE)
-            date = re.search(r"(Date[:\-]?\s*)([\d\-\/]+)", text, re.IGNORECASE)
-            total = re.search(r"(Total[:\-]?\s*)(\d+)", text, re.IGNORECASE)
-            gst = re.search(r"(GST[:\-]?\s*)(\d+%?)", text, re.IGNORECASE)
+        st.subheader(f"Extracted Text - {uploaded_file.name} Page {i+1}")
+        st.text(text)
 
-            data = {
-                "File Name": uploaded_file.name,
-                "Invoice No": invoice_no.group(2) if invoice_no else "Not Found",
-                "Date": date.group(2) if date else "Not Found",
-                "Total": total.group(2) if total else "Not Found",
-                "GST": gst.group(2) if gst else "Not Found"
-            }
+        invoice_no = re.search(r"(Invoice\s*No[:\-]?\s*)(\w+)", text, re.IGNORECASE)
+        date = re.search(r"(Date[:\-]?\s*)([\d\-\/]+)", text, re.IGNORECASE)
+        total = re.search(r"(Total[:\-]?\s*)(\d+)", text, re.IGNORECASE)
+        gst = re.search(r"(GST[:\-]?\s*)(\d+%?)", text, re.IGNORECASE)
 
-            all_data.append(data)
+        data = {
+            "File Name": uploaded_file.name,
+            "Page": i+1,
+            "Invoice No": invoice_no.group(2) if invoice_no else "Not Found",
+            "Date": date.group(2) if date else "Not Found",
+            "Total": total.group(2) if total else "Not Found",
+            "GST": gst.group(2) if gst else "Not Found"
+        }
 
+        all_data.append(data)
         # Create DataFrame
         df = pd.DataFrame(all_data)
 
