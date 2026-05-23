@@ -1,3 +1,4 @@
+from pdf2image import convert_from_bytes  # IMPORTANT
 import streamlit as st
 from PIL import Image
 import pandas as pd
@@ -5,7 +6,6 @@ import re
 import cv2
 import numpy as np
 import easyocr
-from pdf2image import convert_from_bytes  # IMPORTANT
 
 # Initialize OCR ONCE
 reader = easyocr.Reader(['en'], gpu=False)
