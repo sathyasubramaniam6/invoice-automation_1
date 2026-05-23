@@ -5,63 +5,71 @@ import re
 import cv2
 import numpy as np
 import easyocr
+from pdf2image import convert_from_bytes  # IMPORTANT
 
-# Initialize OCR ONCE (important)
+# Initialize OCR ONCE
 reader = easyocr.Reader(['en'], gpu=False)
 
 st.title("📄 Sathya Invoice Automation Tool")
 
 uploaded_files = st.file_uploader(
-    "Upload Invoice Images",
-    type=["png", "jpg", "jpeg","pdf"],
+    "Upload Invoice Images / PDFs",
+    type=["png", "jpg", "jpeg", "pdf"],
     accept_multiple_files=True
 )
 
-for uploaded_file in uploaded_files:
-    images = []
+if uploaded_files:
+    all_data = []
 
-    # Check if PDF
-    if uploaded_file.type == "application/pdf":
-        pdf_bytes = uploaded_file.read()
-        images = convert_from_bytes(pdf_bytes)
-    else:
-        images = [Image.open(uploaded_file)]
+    if st.button("Extract Data from All Files"):
+        for uploaded_file in uploaded_files:
+            images = []
 
-    for i, image in enumerate(images):
-        st.image(image, caption=f"{uploaded_file.name} - Page {i+1}", width=300)
+            # Handle PDF
+            if uploaded_file.type == "application/pdf":
+                pdf_bytes = uploaded_file.read()
+                images = convert_from_bytes(pdf_bytes)
+            else:
+                images = [Image.open(uploaded_file)]
 
-        img = np.array(image)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+            for i, image in enumerate(images):
+                st.image(image, caption=f"{uploaded_file.name} - Page {i+1}", width=300)
 
-        results = reader.readtext(thresh, detail=0)
-        text = " ".join(results)
+                img = np.array(image)
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
 
-        st.subheader(f"Extracted Text - {uploaded_file.name} Page {i+1}")
-        st.text(text)
+                # OCR
+                results = reader.readtext(thresh, detail=0)
+                text = " ".join(results)
 
-        invoice_no = re.search(r"(Invoice\s*No[:\-]?\s*)(\w+)", text, re.IGNORECASE)
-        date = re.search(r"(Date[:\-]?\s*)([\d\-\/]+)", text, re.IGNORECASE)
-        total = re.search(r"(Total[:\-]?\s*)(\d+)", text, re.IGNORECASE)
-        gst = re.search(r"(GST[:\-]?\s*)(\d+%?)", text, re.IGNORECASE)
+                st.subheader(f"Extracted Text - {uploaded_file.name} Page {i+1}")
+                st.text(text)
 
-        data = {
-            "File Name": uploaded_file.name,
-            "Page": i+1,
-            "Invoice No": invoice_no.group(2) if invoice_no else "Not Found",
-            "Date": date.group(2) if date else "Not Found",
-            "Total": total.group(2) if total else "Not Found",
-            "GST": gst.group(2) if gst else "Not Found"
-        }
+                # Extract fields
+                invoice_no = re.search(r"(Invoice\s*No[:\-]?\s*)(\w+)", text, re.IGNORECASE)
+                date = re.search(r"(Date[:\-]?\s*)([\d\-\/]+)", text, re.IGNORECASE)
+                total = re.search(r"(Total[:\-]?\s*)(\d+)", text, re.IGNORECASE)
+                gst = re.search(r"(GST[:\-]?\s*)(\d+%?)", text, re.IGNORECASE)
 
-        all_data.append(data)
-        # Create DataFrame
+                data = {
+                    "File Name": uploaded_file.name,
+                    "Page": i + 1,
+                    "Invoice No": invoice_no.group(2) if invoice_no else "Not Found",
+                    "Date": date.group(2) if date else "Not Found",
+                    "Total": total.group(2) if total else "Not Found",
+                    "GST": gst.group(2) if gst else "Not Found"
+                }
+
+                all_data.append(data)
+
+        # Create DataFrame (OUTSIDE LOOP ✅)
         df = pd.DataFrame(all_data)
 
         st.subheader("📊 Final Extracted Data")
         st.dataframe(df)
 
-        # Add total summary (NEW FEATURE 🔥)
+        # Total Summary
         try:
             df["Total"] = pd.to_numeric(df["Total"], errors='coerce')
             total_sum = df["Total"].sum()
