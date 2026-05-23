@@ -5,8 +5,11 @@ import pandas as pd
 import re
 import cv2
 import numpy as np
+import easyocr
+
 
 # Tesseract path for Streamlit Cloud
+reader = easyocr.Reader(['en'])
 pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
 st.title("📄 Invoice Data Extractor")
@@ -22,8 +25,9 @@ if uploaded_file is not None:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
 
-        text = pytesseract.image_to_string(thresh)
-
+        # text = pytesseract.image_to_string(thresh)
+        results = reader.readtext(thresh, detail=0)
+        text = " ".join(results)
         st.subheader("Extracted Text")
         st.text(text)
 
