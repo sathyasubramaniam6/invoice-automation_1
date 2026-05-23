@@ -1,5 +1,4 @@
 import streamlit as st
-import pytesseract
 from PIL import Image
 import pandas as pd
 import re
@@ -7,49 +6,74 @@ import cv2
 import numpy as np
 import easyocr
 
+# Initialize OCR ONCE (important)
+reader = easyocr.Reader(['en'], gpu=False)
 
-# Tesseract path for Streamlit Cloud
-reader = easyocr.Reader(['en'])
-pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+st.title("📄 Sathya Invoice Automation Tool")
 
-st.title("📄 Invoice Data Extractor")
+uploaded_files = st.file_uploader(
+    "Upload Invoice Images",
+    type=["png", "jpg", "jpeg"],
+    accept_multiple_files=True
+)
 
-uploaded_file = st.file_uploader("Upload Invoice Image", type=["png", "jpg", "jpeg"])
+if uploaded_files:
+    all_data = []
 
-if uploaded_file is not None:
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Invoice", use_column_width=True)
+    if st.button("Extract Data from All Invoices"):
+        for uploaded_file in uploaded_files:
+            image = Image.open(uploaded_file)
+            st.image(image, caption=uploaded_file.name, width=300)
 
-    if st.button("Extract Data"):
-        img = np.array(image)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+            # Preprocessing
+            img = np.array(image)
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
 
-        # text = pytesseract.image_to_string(thresh)
-        results = reader.readtext(thresh, detail=0)
-        text = " ".join(results)
-        st.subheader("Extracted Text")
-        st.text(text)
+            # OCR
+            results = reader.readtext(thresh, detail=0)
+            text = " ".join(results)
 
-        invoice_no = re.search(r"(Invoice\s*No[:\-]?\s*)(\w+)", text, re.IGNORECASE)
-        date = re.search(r"(Date[:\-]?\s*)([\d\-\/]+)", text, re.IGNORECASE)
-        total = re.search(r"(Total[:\-]?\s*)(\d+)", text, re.IGNORECASE)
-        gst = re.search(r"(GST[:\-]?\s*)(\d+%?)", text, re.IGNORECASE)
+            st.subheader(f"Extracted Text - {uploaded_file.name}")
+            st.text(text)
 
-        data = {
-            "Invoice No": invoice_no.group(2) if invoice_no else "",
-            "Date": date.group(2) if date else "",
-            "Total": total.group(2) if total else "",
-            "GST": gst.group(2) if gst else ""
-        }
+            # Field extraction
+            invoice_no = re.search(r"(Invoice\s*No[:\-]?\s*)(\w+)", text, re.IGNORECASE)
+            date = re.search(r"(Date[:\-]?\s*)([\d\-\/]+)", text, re.IGNORECASE)
+            total = re.search(r"(Total[:\-]?\s*)(\d+)", text, re.IGNORECASE)
+            gst = re.search(r"(GST[:\-]?\s*)(\d+%?)", text, re.IGNORECASE)
 
-        df = pd.DataFrame([data])
+            data = {
+                "File Name": uploaded_file.name,
+                "Invoice No": invoice_no.group(2) if invoice_no else "Not Found",
+                "Date": date.group(2) if date else "Not Found",
+                "Total": total.group(2) if total else "Not Found",
+                "GST": gst.group(2) if gst else "Not Found"
+            }
 
-        st.subheader("Extracted Data")
+            all_data.append(data)
+
+        # Create DataFrame
+        df = pd.DataFrame(all_data)
+
+        st.subheader("📊 Final Extracted Data")
         st.dataframe(df)
 
-        excel_file = "output.xlsx"
+        # Add total summary (NEW FEATURE 🔥)
+        try:
+            df["Total"] = pd.to_numeric(df["Total"], errors='coerce')
+            total_sum = df["Total"].sum()
+            st.success(f"💰 Total Amount of All Invoices: ₹{total_sum}")
+        except:
+            pass
+
+        # Download Excel
+        excel_file = "all_invoices.xlsx"
         df.to_excel(excel_file, index=False)
 
         with open(excel_file, "rb") as f:
-            st.download_button("Download Excel", f, file_name="invoice_data.xlsx")
+            st.download_button(
+                "⬇ Download All Invoices Excel",
+                f,
+                file_name="all_invoices.xlsx"
+            )
